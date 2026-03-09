@@ -1,843 +1,403 @@
-#include <tim.h>
 #include <driver_timer.h>
 #include "control_logic.h"
 #include "hardware_config.h"
-#include "mecanum_chassis.h"
-#include "attitude.h"
-#include "usart.h"
-#include "stdio.h"
-#include "servo.h"
-#include "modbus.h"
-#include "lifting.h"
-#include "protract.h"
-#include "ore.h"
-#include "interaction.h"
-#include "mit.h"
-#include "Custom_controller.h"
-#include "interaction_image.h"
-#include "et08.h"
-#include "gyro.h"
-#include "referee.h"
-#include "check.h"
-#define servo_min  13
-#define servo_max  20
 
+
+
+#define servo_red_min 13
+#define servo_red_max 20
 
 #define servo_yellow_max 495
+
 uint8_t flag_completely;
-uint8_t change_mode=1;
-uint8_t cnt_2006_down,cnt_2006_up,cnt_6020_move,cnt_6020_back;
-uint8_t  servo_check_number(uint8_t buf[]);//–£—ÈŒª
-void servo_move(uint16_t id,uint16_t time,int16_t angle);//Œª÷√øÿ÷∆ƒ£ Ω
-//–Ë“™–ﬁ∏ƒµƒ¥˙¬Î£∫plunging reset
-int b1=0;
-int cnt__l=0,flag_none;
-#define abs(x) ((x)>0? (x):(-(x)))
+uint8_t change_mode = 1;
+uint8_t cnt_2006_down, cnt_2006_up, cnt_6020_move, cnt_6020_back;
+uint8_t servo_check_number(uint8_t buf[]);					// Ê†°È™å‰Ωç
+void servo_move(uint16_t id, uint16_t time, int16_t angle); // ‰ΩçÁΩÆÊéßÂà∂Ê®°Âºè
+// ÈúÄË¶Å‰øÆÊîπÁöÑ‰ª£Á†ÅÔºöplunging reset
+int b1 = 0;
+int cnt__l = 0, flag_none;
+#define abs(x) ((x) > 0 ? (x) : (-(x)))
+
+float InversePitchCalculation(float);
 
 
-float InversePitchCalculation(float );
-	
-typedef struct 
-{
-  int Yaw_offset;
-  float Pitch_offset;
-	uint8_t Index;
-}Dart_Info;	
+Dart_Info infor[8] = {
+	{-215, 29.595, 8}, {-146, 29.202, 1}, {-232, 29.722, 4}, {-198, 29.585, 2}, {-80, 30.23159, 9},
+	{-50, 30.91769, 3}};
 
-Dart_Info infor[8]={
-{-215,29.595,8},{-146,29.202,1},{-232,29.722,4},{-198,29.585,2},
-{-80,30.23159,9},
-
-{-50,30.91769,3}
-};
-//int  mll=infor[0].Yaw_offset;
-int  mll=0;
+float Yaw_offset = 0;
 uint8_t Last_dart_launch_opening_status;
-int m11;  
+int Speed_3508;
 float kll;
-uint8_t flag_yaw_stop=0,mode,shot_complete;
+uint8_t flag_yaw_stop = 0, mode, shot_complete;
 uint16_t cnt_complete;
-uint8_t flag_pitch_stop=0;
-uint8_t flag_shoot=servo_min;
-//uint8_t flag_shoot=10;
-uint8_t  flag_stop=0,flag_Camera=1;
-uint8_t  flag_reset=0;
-int cnt_2006_yaw,cnt_2006_pitch;
-int cnt,cnt_2,flag_2006,cnt_2006;
-float Target_Angle_3508=0;
-float Target_Angle_2006=0;
-float Target_Angle_2006_yaw=0;
-float Target_Angle_2006_pitch=0;
+uint8_t flag_pitch_stop = 0;
+uint8_t flag_shoot = servo_red_min;
+// uint8_t flag_shoot=10;
+uint8_t flag_stop = 0, flag_Camera = 1;
+uint8_t flag_reset = 0;
+int cnt_2006_yaw, cnt_2006_pitch;
+int cnt, cnt_2, flag_2006, cnt_2006;
+float Target_Angle_3508 = 0;
+float Target_Angle_2006 = 0;
+float Target_Angle_2006_yaw = 0;
+float Target_Angle_2006_pitch = 0;
 int cnt_servo_;
 /**
-  * @brief  ÷˜»ŒŒÒ∫Ø ˝
-  */
-uint8_t	flag11,flag_wait;
+ * @brief  ‰∏ª‰ªªÂä°ÂáΩÊï∞
+ */
+uint8_t flag11, flag_wait;
 uint16_t cnt1111;
-float a22,a23;
+float a22, a23;
 
 int cntmm;
-float Yaw,Pitch;
-int b22=120;
+float Yaw, Pitch;
+int servo_yellow = 120;
 int Target_Angle_2006_load;
-uint8_t Reload_mode;
+uint8_t Reload_mode;//Êç¢ÂºπÊ®°Âºè 1-Êç¢Âºπ1 2-Êç¢Âºπ2 3-Êç¢Âºπ ‰∏ÄÂÖ±‰∏âÂèë
 float Yaw_add;
-uint16_t Camera_cnt,Camera_Fps;
-RubberState_t Rubber_state=Rubber_IDLE;
+uint16_t Camera_cnt, Camera_Fps;
+RubberState_t Rubber_state = Rubber_IDLE;
 ReloadState_t Reload_state = RELOAD_IDLE;
-uint16_t cnt6020_down,cnt6020_up,cnt2006_down,cnt2006_up,cnt_servo,cnt_error;
-float Target_6020=-270;
+uint16_t cnt6020_down, cnt6020_up, cnt2006_down, cnt2006_up, cnt_servo, cnt_error;
+float Target_6020 = -270;
 int cnt_up_stop;
-int Timer=0;
+int Timer = 0;
 int flll;
 float Rubber_Reset_Angel;
+
 void TIM14_Task(void)
 {
-	
 	int i;
-static int cnt_shoot=0,cnt_yaw_stop=0,cnt_reset=0,cnt_pitch_stop=0,cnt_down_stop;	
+	static int cnt_yaw_stop = 0, cnt_pitch_stop = 0, cnt_down_stop, cnt_reset = 0;
 	tim14.ClockTime++;
-	if(tim14.ClockTime==1) 
-	{Target_Angle_2006=motor2006.motor[0].Data.TotalAngle;
-		mll=infor[0].Yaw_offset;
-	}
-	
-		if(tim14.ClockTime%1000==0)
-		{
-			Camera_Fps=Camera_cnt;
-        Camera_cnt=0;
-			
-		}
-  RobotOnlineState(&check_robot_state, &referee2022, &rc_Ctrl_et);
-	//…œ∂¬◊™
-		if (HAL_GPIO_ReadPin(GPIOE,GPIO_PIN_4)==0) cnt_up_stop++;else cnt_up_stop=0;
-		if (cnt_up_stop>5) {cnt_up_stop=0;flag_stop=1;Target_Angle_3508=motor3508.motor[0].Data.TotalAngle-200;motor3508.motor[0].Data.Target=0;}
 
-				
-	
-	
-	motor2006.motor[0].Data.Output =
-	BasePID_YawSpeedControl((BasePID_Object*)(&Motors2006_SpeedPID) , 
-	BasePID_YawAngleControl((BasePID_Object*)(&Motors2006_AngelPID) , Target_Angle_2006 , motor2006.motor[0].Data.TotalAngle)  ,motor2006.motor[0].Data.SpeedRPM);	
-				
-				
+	Target_Angle_2006 = motor2006.motor[0].Data.TotalAngle;
+	Yaw_offset = infor[0].Yaw_offset;
 
-			if (rc_Ctrl_et.isOnline==1 && flag_2006==0 &&rc_Ctrl_et.rc.s2!=2 ) Target_Angle_2006+=(rc_Ctrl_et.rc.ch3 -1024)* 0.05;
-			if (rc_Ctrl_et.isOnline==1  &&rc_Ctrl_et.rc.s2==2 ) 
-			{
-				Target_Angle_2006_yaw-=(rc_Ctrl_et.rc.ch2 -1024)* 0.05;	
-	Target_Angle_2006_pitch-=(rc_Ctrl_et.rc.ch3 -1024)* 0.05;
-			
-			
-			}
-//				if (abs(motor2006.motor[0].Data.Output)>3000&&rc_Ctrl_et.isOnline==1 )   cnt_2++;else cnt_2=0;
-//			if  (cnt_2>=300)
-//{flag_2006=1;cnt_2=0;Target_Angle_2006=motor2006.motor[0].Data.TotalAngle;}	
-				
-	if  (rc_Ctrl_et.rc.s1==3) m11=0;
-	else if (rc_Ctrl_et.rc.s1==2) m11=-5000;
-	else if (rc_Ctrl_et.rc.s1==1) m11=8000;
-			
-//œ˚∂¬◊™	
-	if  (rc_Ctrl_et.rc.s2==1 && rc_Ctrl_et.rc.s2_last==3&& flag_stop==1&&referee2022.game_status.game_progress!=4) flag_stop=0;
-
-	if (rc_Ctrl_et.rc.s2==1 && rc_Ctrl_et.rc.s2_last==3&&referee2022.game_status.game_progress==4) 
-{
-						mode++;
-	
-//		if (mode==1)	{Target_Angle_2006=Rubber_Reset_Angel-100*(121);;if (Rubber_state== Rubber_IDLE) {Rubber_state= Rubber_STEP1;flag_stop=0;}}
-		if (mode==1)	{Target_Angle_2006_pitch=InversePitchCalculation(infor[0].Pitch_offset)+a23;if (Rubber_state== Rubber_IDLE) {Rubber_state= Rubber_STEP1;flag_stop=0;}}
-		//		if (mode==1)	{if (Rubber_state== Rubber_IDLE) {Rubber_state= Rubber_STEP1;flag_stop=0;}}
-		else if (mode==2) 	
-		{		
-	if (Rubber_state== Rubber_IDLE ||Rubber_state== Rubber_COMPLETE)
-	{Rubber_state= Rubber_STEP1;flag_stop=0;}
-		flag_completely=1;
-		b22=servo_yellow_max;
-
-	}
-
-}
-//if (referee2022.game_status.game_progress==4)
-if (rc_Ctrl_et.rc.s2==2 && rc_Ctrl_et.rc.s2_last==3&&referee2022.game_status.game_progress==4) 
-{
-	
-	
-	
-	flag_wait=1;
-	
-	
-}
-		
-//if (rc_Ctrl_et.rc.s2==2 && rc_Ctrl_et.rc.s2_last==3)
-//	
-//{
-//	flll++;
-//	
-//	
-//}
-rc_Ctrl_et.rc.s2_last=rc_Ctrl_et.rc.s2;
-		rc_Ctrl_et.rc.s1_last=rc_Ctrl_et.rc.s1;
-//	if (flag_wait==1&&Rubber_state==Rubber_COMPLETE)
-//	{
-//								if (mode==1 ) {if (flag_shoot==servo_min) flag_shoot=servo_max;else flag_shoot=servo_min;shot_complete=1;}
-//		if (mode==2 ) {if (flag_shoot==servo_min) flag_shoot=servo_max;else flag_shoot=servo_min;shot_complete=1;}
-//		flag_wait=0;
-//		
-//	}
-	if    (abs(rc_Ctrl_et.rc.ch1-1024)>500&& rc_Ctrl_et.rc.s2==2)  cnt_2006_pitch++; else cnt_2006_pitch=0;
-	if    (abs(rc_Ctrl_et.rc.ch0-1024)>500&& rc_Ctrl_et.rc.s2==2)  cnt_2006_yaw++; else cnt_2006_yaw=0;
-	if  (cnt_2006_pitch>=800&&rc_Ctrl_et.rc.ch1-1024>=0)  {Target_Angle_2006_pitch-=12900;cnt_2006_pitch=0;}
-		if  (cnt_2006_pitch>=800&&rc_Ctrl_et.rc.ch1-1024<=0)  {Target_Angle_2006_pitch+=12900;cnt_2006_pitch=0;}
-			
-	if  (cnt_2006_yaw>=800&&rc_Ctrl_et.rc.ch0-1024>=0){Target_Angle_2006_yaw-=3800;cnt_2006_yaw=0;}
-	if  (cnt_2006_yaw>=800&&rc_Ctrl_et.rc.ch0-1024<=0){Target_Angle_2006_yaw+=3800;cnt_2006_yaw=0;}
-	
-	if    (abs(rc_Ctrl_et.rc.ch2-1024)>500&& rc_Ctrl_et.rc.s2!=2)  cnt_2006++; else cnt_2006=0;
-if  (cnt_2006>=800&&rc_Ctrl_et.rc.ch2-1024>=0)
-{Target_Angle_2006-=1900;cnt_2006=0;}
-else if  (cnt_2006>=800&&rc_Ctrl_et.rc.ch2-1024<0)
-	{Target_Angle_2006+=1900;cnt_2006=0;}
-	
-//ø™πÿ∂Êª˙		
-	if    (abs(rc_Ctrl_et.rc.ch0-1024)>500 && rc_Ctrl_et.rc.s2!=2&&referee2022.game_status.game_progress!=4)  cnt_shoot++; else cnt_shoot=0;
-	
-if  (cnt_shoot>=1000)
- {
- if (flag_shoot==servo_min) flag_shoot=servo_max;else flag_shoot=servo_min;
- cnt_shoot=0;
- }
-// 
-// if (flag_shoot==7) cntmm++;
-// 
-// if (cntmm>200) {flag_shoot=20;cntmm=0;}
- 
-//		flag_yaw_stop=1;
-//		flag_pitch_stop=1;
-
-				if(abs(motor3508.motor[0].Data.Target-motor3508.motor[0].Data.SpeedRPM)>350 && flag_stop==0)//∂¬◊™≈–∂œ
-					cnt_down_stop++;else cnt_down_stop=0;
-				if(cnt_down_stop>=200)
-				{
-					cnt_down_stop=0;
-					Target_Angle_3508=motor3508.motor[0].Data.TotalAngle+100;
-					flag_stop=1;
-					motor3508.motor[0].Data.Target=0;
-          
-				}
-//				if(abs(motor3508.motor[0].Data.Target-motor3508.motor[0].Data.SpeedRPM)>350 && flag_stop==0)//∂¬◊™≈–∂œ
-//				cnt_down_stop++;else cnt_down_stop=0;
-//				if(cnt_down_stop>=200)
-//				{
-//					cnt_down_stop=0;
-//					Target_Angle_3508=motor3508.motor[0].Data.TotalAngle+100;
-//					flag_stop=1;
-//					motor3508.motor[0].Data.Target=0;//º”»Î≈–∂œ…œœ¬
-//          
-//				}
-
-				
-				
-				
-	if (flag_reset==1)  
+	if (tim14.ClockTime % 1000 == 0)
 	{
-	motor2006.motor[1].Data.Target=-4000;	
-	motor2006.motor[2].Data.Target=-6000;	
-		
-		if (flag_yaw_stop==0)
-	motor2006.motor[1].Data.Output = BasePID_SpeedControl(&run_pid,motor2006.motor[1].Data.Target,motor2006.motor[1].Data.SpeedRPM);
-	  else    
-		{
-			motor2006.motor[1].Data.Output=
-	 BasePID_PitchSpeedControl((BasePID_Object*)(&Motors2006_yaw_SpeedPID) , 
-   BasePID_YawAngleControl((BasePID_Object*)(&Motors2006_yaw_AngelPID) , Target_Angle_2006_yaw ,motor2006.motor[1].Data.TotalAngle ),motor2006.motor[1].Data.SpeedRPM);
-			if (motor2006.motor[1].Data.Output>5000) motor2006.motor[1].Data.Output=5000;
-	   else if (motor2006.motor[1].Data.Output<-5000) motor2006.motor[1].Data.Output=-5000;
-		}
-
-				if (flag_pitch_stop==0)
-	motor2006.motor[2].Data.Output = BasePID_SpeedControl(&run_pid,motor2006.motor[2].Data.Target,motor2006.motor[2].Data.SpeedRPM);
-	  else    
-		{
-			motor2006.motor[2].Data.Output=
-	 BasePID_PitchSpeedControl((BasePID_Object*)(&Motors2006_pitch_SpeedPID) , 
-   BasePID_YawAngleControl((BasePID_Object*)(&Motors2006_pitch_AngelPID) , Target_Angle_2006_pitch ,motor2006.motor[2].Data.TotalAngle ),motor2006.motor[2].Data.SpeedRPM);
-			if (motor2006.motor[2].Data.Output>5000) motor2006.motor[2].Data.Output=5000;
-	   else if (motor2006.motor[2].Data.Output<-5000) motor2006.motor[2].Data.Output=-5000;
-		}
-		
-				if(abs(motor2006.motor[1].Data.Target-motor2006.motor[1].Data.SpeedRPM)>250 &&flag_yaw_stop==0)//∂¬◊™≈–∂œ
-			cnt_yaw_stop++;else cnt_yaw_stop=0;
-		if(cnt_yaw_stop>=50)
-		{
-			cnt_yaw_stop=0;
-			
-			flag_yaw_stop=1;
-			a22=motor2006.motor[1].Data.TotalAngle;
-//Target_Angle_2006_yaw=motor2006.motor[1].Data.TotalAngle+391263;
-//			Target_Angle_2006_yaw=motor2006.motor[1].Data.TotalAngle+191263;
-						Target_Angle_2006_yaw=motor2006.motor[1].Data.TotalAngle+111263;
-		}
-		
-		
-		
-	if(abs(motor2006.motor[2].Data.Target-motor2006.motor[2].Data.SpeedRPM)>250 &&flag_pitch_stop==0)//∂¬◊™≈–∂œ
-			cnt_pitch_stop++;else cnt_pitch_stop=0;
-		if(cnt_pitch_stop>=50)
-		{
-			cnt_pitch_stop=0;
-			a23=motor2006.motor[2].Data.TotalAngle;
-			flag_pitch_stop=1;
-Target_Angle_2006_pitch=motor2006.motor[2].Data.TotalAngle+170000;
-			
-		}
-		
-		
-		
-		
+		Camera_Fps = Camera_cnt;
+		Camera_cnt = 0;
 	}
-	
-	
-	
-	
-	
-	
-	    switch (Reload_state) {
-        case RELOAD_IDLE:
-        if  (Reload_mode)
-				{
-					
-                
-					      b22=servo_yellow_max;
-					cnt_servo++;
-					if (cnt_servo>1000) {cnt_servo=0;Reload_state = RELOAD_STEP1;}
-		
-   
-					
-            }
-            break;
 
-        case RELOAD_STEP1:
-        				if (Reload_mode==1)
-								{ 
-//								Target_6020 += 91;  mll=-103;Target_Angle_2006=Rubber_Reset_Angel-100*(167);}
-//					else if (Reload_mode==2) {Target_6020 += 181;mll=-45;Target_Angle_2006=Rubber_Reset_Angel-100*(94);}
-//					else if (Reload_mode==3) {Target_6020 += 270;mll=-55;Target_Angle_2006=Rubber_Reset_Angel-100*(68);}
-            
-                								Target_6020 += 91;  mll=infor[1].Yaw_offset;Target_Angle_2006_pitch=InversePitchCalculation(infor[1].Pitch_offset)+a23;}
-					else if (Reload_mode==2) {Target_6020 += 181;mll=infor[2].Yaw_offset;Target_Angle_2006_pitch=InversePitchCalculation(infor[2].Pitch_offset)+a23;}
-					else if (Reload_mode==3) {Target_6020 += 270;mll=infor[3].Yaw_offset;Target_Angle_2006_pitch=InversePitchCalculation(infor[3].Pitch_offset)+a23;}
-            Reload_state = RELOAD_STEP1_5;
-          break;
+	RobotOnlineState(&check_robot_state, &referee2022, &rc_Ctrl_et);
+	// ‰∏äÂ†µËΩ¨
+	up_stop();
 
-						     case RELOAD_STEP1_5:
-                if (abs(Target_6020 - motor6020.motor[0].Data.TotalAngle) < 1.5) 
-							cnt_6020_move++;else cnt_6020_move = 0;
-							
-                if (cnt_6020_move > 50) {
-                    cnt_6020_move = 0;
-                    Reload_state = RELOAD_STEP2;
-                    Target_Angle_2006_load -= 60436;  // ≥ı ºªØµ⁄∂˛≤Ωƒø±Í
-                }
-            
-                
-            
-          break;		
-								
+	if (rc_Ctrl_et.isOnline == 1 && flag_2006 == 0 && rc_Ctrl_et.rc.s2 != 2)
+		Target_Angle_2006 += (rc_Ctrl_et.rc.ch3 - 1024) * 0.05;
 
-								
-        case RELOAD_STEP2:
-				if 	(abs(motor2006.motor[3].Data.SpeedRPM-Motors2006_load_AngelPID.Out)>200 ) cnt_error++;else cnt_error=0;
-				if (cnt_error>100) Reload_state=RELOAD_ERROR;
-				
-            if (abs(Target_Angle_2006_load - motor2006.motor[3].Data.TotalAngle) < 200) 
-							cnt_2006_down++;else cnt_2006_down = 0;
-							
-                if (cnt_2006_down > 100) {
-                    cnt_2006_down = 0;
-									
-                    Reload_state = RELOAD_STEP3;
-                    Target_Angle_2006_load += 60436;  // ≥ı ºªØµ⁄»˝≤Ωƒø±Í
-                }
-      
-            break;
-
-								 case RELOAD_STEP3:
-									 
-								 
-            if (abs(Target_Angle_2006_load - motor2006.motor[3].Data.TotalAngle) < 9000) 
-							cnt_2006_up++;else cnt_2006_up = 0;
-						
-						 if (abs(Target_Angle_2006_load - motor2006.motor[3].Data.TotalAngle) < 45000) 
-							cnt_servo++;else cnt_servo = 0;
-
-
-						 if (cnt_servo>50) {cnt_servo=0;	b22=120;}
-						
-                if (cnt_2006_up > 100) {
-                    cnt_2006_up = 0;
-                    Reload_state = RELOAD_STEP4;
-											if (Reload_mode==1)
-                Target_6020 -= 91;  // ≥ı ºªØµ⁄“ª≤Ωƒø±Í
-					else if (Reload_mode==2) Target_6020 -= 181;
-					else if (Reload_mode==3) Target_6020 -= 270;
-                  
-                }
-      
-            break;
-					case RELOAD_STEP4:
-               if (abs(Target_6020 - motor6020.motor[0].Data.TotalAngle) < 1) 
-							cnt_6020_back++;else cnt_6020_back = 0;
-							
-                if (cnt_6020_back > 100) {
-                    cnt_6020_back = 0;
-                    Reload_state = RELOAD_COMPLETE;
-                 
-                }
-      
-            break;	
-								
-        // ∆‰À˚◊¥Ã¨¿‡À∆...
-        case RELOAD_COMPLETE:
-            
-//				if (rc_Ctrl_et.rc.s2 == 1 && rc_Ctrl_et.rc.s2_last == 3) 
-//				{Reload_mode++;
-//				Reload_state = RELOAD_IDLE;}
-				
-//            Reload_state = RELOAD_IDLE;
-            break;
-				case RELOAD_ERROR:
-				motor2006.motor[3].Data.Output=0;
-				motor6020.motor[0].Data.Output=0;
-				b22=servo_yellow_max;
-				
-				
-				break;
-    }
-			
-			    switch (Rubber_state) {
-        case Rubber_IDLE:
-				{
-					
-					
-				}
-				
-            break;
-
-        case Rubber_STEP1:
-				{
-					m11=-5000;
-					if  (flag_stop==1) Rubber_state=Rubber_STEP2;
-				}
-                
-            
-          break;		
-								
-								
-								
-        case Rubber_STEP2:
-		 flag_shoot=servo_max;
-				cnt_servo_++;
-					if (flag_completely==1) 		{Reload_mode++;
-		if (Reload_state ==RELOAD_COMPLETE) 
-				Reload_state = RELOAD_STEP1;flag_completely=0;}
-				if (cnt_servo_>1500) {cnt_servo_=0;Rubber_state=Rubber_STEP3;flag_stop=0;}
-				
-            break;
-
-						    case Rubber_STEP3:
-				if 					(Reload_mode==0)	
-				{m11=6000;
-     if  (flag_stop==1) Rubber_state=Rubber_COMPLETE;}
-				else if (Reload_state ==RELOAD_COMPLETE )
-				{
-					m11=6000;
-     if  (flag_stop==1) Rubber_state=Rubber_COMPLETE;
-					
-					
-					
-				}
-            break;	
-				
-				
-        case Rubber_COMPLETE:
-
-			
-				
-				
-            break;
-				case Rubber_ERROR:
-				
-				
-				break;
-    }
-		
-		
-			if (flag_stop==0)	motor3508.motor[0].Data.Target=m11;	else {motor3508.motor[0].Data.Target=0;}
-		
-		
-		
-		  if (flag_stop==1) 		
-   motor3508.motor[0].Data.Output=
-	 BasePID_PitchSpeedControl((BasePID_Object*)(&Motors3508_SpeedPID) , 
-   BasePID_PitchAngleControl((BasePID_Object*)(&Motors3508_AngelPID) , Target_Angle_3508 ,motor3508.motor[0].Data.TotalAngle ),motor3508.motor[0].Data.SpeedRPM);
-  else motor3508.motor[0].Data.Output = BasePID_SpeedControl(&run_pid, motor3508.motor[0].Data.Target,motor3508.motor[0].Data.SpeedRPM);
-		
-		
-		
-			if(rc_Ctrl_et.isOnline==0) motor2006.motor[3].Data.Output=0;
-			else 			motor2006.motor[3].Data.Output=
-	 BasePID_PitchSpeedControl((BasePID_Object*)(&Motors2006_load_SpeedPID) , 
-   BasePID_YawAngleControl((BasePID_Object*)(&Motors2006_load_AngelPID) , Target_Angle_2006_load ,motor2006.motor[3].Data.TotalAngle ),motor2006.motor[3].Data.SpeedRPM);
-			
-						
-		if(rc_Ctrl_et.isOnline==0 ) motor6020.motor[0].Data.Output=0;
-			else 			motor6020.motor[0].Data.Output=
-	 BasePID_PitchSpeedControl((BasePID_Object*)(&Motors6020_pitch_SpeedPID) , 
-   BasePID_YawAngleControl((BasePID_Object*)(&Motors6020_pitch_AngelPID) , Target_6020 ,motor6020.motor[0].Data.TotalAngle),motor6020.motor[0].Data.SpeedRPM);
-	
-	
-int k=0;
-		if (tim14.ClockTime%80==k*5)
-			UsartDmaPrintf_("∏ƒ±‰Ω«∂».x1.val=%d",(int) (Yaw*1000));
-		k++;
-				if (tim14.ClockTime%80==k*5)
-			UsartDmaPrintf_("∏ƒ±‰Ω«∂».x0.val=%d",(int) (Pitch*1000));
-k++;
-	if (tim14.ClockTime%80==k*5)
-	UsartDmaPrintf_(" ”æı–£◊º.n1.val=%d",mll);
-	k++;
-	if (tim14.ClockTime%80==k*5)
-	UsartDmaPrintf_(" ”æı–£◊º.n0.val=%d",(int)Yaw_add);
-		k++;
-	if (tim14.ClockTime%80==k*5)
-	UsartDmaPrintf_("–ﬁ∏ƒPitch.x1.val=%d",(int) (1000*infor[0].Pitch_offset));
-	k++;
-		if (tim14.ClockTime%80==k*5)
-	UsartDmaPrintf_("–ﬁ∏ƒPitch.x2.val=%d",(int) (1000*infor[1].Pitch_offset));
-	k++;
-			if (tim14.ClockTime%80==k*5)
-	UsartDmaPrintf_("–ﬁ∏ƒPitch.x3.val=%d",(int) (1000*infor[2].Pitch_offset));
-	k++;
-				if (tim14.ClockTime%80==k*5)
-	UsartDmaPrintf_("–ﬁ∏ƒPitch.x4.val=%d",(int) (1000*infor[3].Pitch_offset));
-	k++;
-					if (tim14.ClockTime%80==k*5)
-	UsartDmaPrintf_("–ﬁ∏ƒPitch.b2.txt=\"—°÷–: %d\"",(int) (change_mode));
-	k++;
-	if (rc_Ctrl_et.rc.s2==2) cnt_reset++;else cnt_reset=0;
-	if (cnt_reset>1000) {cnt_reset=0;flag_reset=1;}
-	
-	
-	
-	
-//ø™πÿ∂Êª˙				
-
-	
-		if(rc_Ctrl_et.isOnline != 1)
+	if (rc_Ctrl_et.isOnline == 1 && rc_Ctrl_et.rc.s2 == 2)
 	{
-		ET08Init(&rc_Ctrl_et);
-		flag_stop=0;
+		Target_Angle_2006_yaw -= (rc_Ctrl_et.rc.ch2 - 1024) * 0.05;
+		Target_Angle_2006_pitch -= (rc_Ctrl_et.rc.ch3 - 1024) * 0.05;
+	}
 
-	//	flag_reset=0;
-	}
-	
-	
-	if (rc_Ctrl_et.isOnline==0) {motor3508.motor[0].Data.Output=0;motor2006.motor[0].Data.Output=0;motor2006.motor[1].Data.Output=0;motor2006.motor[2].Data.Output=0;}
+	if (rc_Ctrl_et.rc.s1 == 3)
+		Speed_3508 = 0; // Â∑¶Êã®ÊùÜÊéßÂà∂3508‰∏ä‰∏ã
+	else if (rc_Ctrl_et.rc.s1 == 2)
+		Speed_3508 = -5000;
+	else if (rc_Ctrl_et.rc.s1 == 1)
+		Speed_3508 = 8000;
 
-//OnlineCheck_Fresh(can2,&check);
-		
-	if (Reload_state!=RELOAD_ERROR)
-	{
-	MotorFillData(&motor3508.motor[0],motor3508.motor[0].Data.Output);
-  MotorFillData(&motor2006.motor[0],motor2006.motor[0].Data.Output);
-	MotorFillData(&motor2006.motor[1],motor2006.motor[1].Data.Output);
-	MotorFillData(&motor2006.motor[2],motor2006.motor[2].Data.Output);
-	MotorFillData(&motor6020.motor[0],motor6020.motor[0].Data.Output);
-	MotorFillData(&motor2006.motor[3],motor2006.motor[3].Data.Output);
-	}
-	else 
-	{
-	MotorFillData(&motor3508.motor[0],0);
-  MotorFillData(&motor2006.motor[0],0);
-	MotorFillData(&motor2006.motor[1],0);
-	MotorFillData(&motor2006.motor[2],0);
-	MotorFillData(&motor6020.motor[0],0);
-	MotorFillData(&motor2006.motor[3],0);
-	}		
-	
-	
-	
-	
-	MotorCanOutput(can2, 0x1FF);
-	MotorCanOutput(can1, 0x1FF);
-		if (Yaw_add!=0&&flag_Camera==0)
-		{	if (Yaw_add>(5+mll)&&tim14.ClockTime%100==0&&flag_reset==1&&flag_yaw_stop==1&&rc_Ctrl_et.rc.s2==1)    Target_Angle_2006_yaw+=2000;
-else if (Yaw_add<(-5+mll)&&tim14.ClockTime%100==0&&flag_reset==1&&flag_yaw_stop==1&&rc_Ctrl_et.rc.s2==1) Target_Angle_2006_yaw-=2000;
-else if 	(Yaw_add>(-5+mll)&&Yaw_add<(-2+mll)&&tim14.ClockTime%100==0&&flag_reset==1&&flag_yaw_stop==1&&rc_Ctrl_et.rc.s2==1) Target_Angle_2006_yaw-=500;			
-else if (Yaw_add<(5+mll)&&Yaw_add>(2+mll)&&tim14.ClockTime%100==0&&flag_reset==1&&flag_yaw_stop==1&&rc_Ctrl_et.rc.s2==1) Target_Angle_2006_yaw+=500;		}	
-	else if (Yaw_add!=0&&flag_Camera==1)
-	{
-		if (tim14.ClockTime%100==0)
-		{if (Yaw_add>(5+mll))    Target_Angle_2006_yaw+=2000;
-else if (Yaw_add<(-5+mll)) Target_Angle_2006_yaw-=2000;
-else if 	(Yaw_add>(-5+mll)&&Yaw_add<(-2+mll)) Target_Angle_2006_yaw-=500;			
-else if (Yaw_add<(5+mll)&&Yaw_add>(2+mll)) Target_Angle_2006_yaw+=500;
-		}
-	}
-	if (flag_none) cnt__l++;
-	if (cnt__l>=18000) {
-	
-	
-	cnt__l=0;flag_none=0;
-			if (mode==1 &&Rubber_state==Rubber_COMPLETE) {if (flag_shoot==servo_min) flag_shoot=servo_max;else flag_shoot=servo_min;shot_complete=1;}
-		if (mode==2 &&Rubber_state==Rubber_COMPLETE) {if (flag_shoot==servo_min) flag_shoot=servo_max;else flag_shoot=servo_min;shot_complete=1;}
-	
-	}
-				if (shot_complete==1) cnt_complete++;
-					if (cnt_complete>1500) {shot_complete=2;cnt_complete=0;}
-				if (shot_complete==2) {		if (Rubber_state== Rubber_IDLE ||Rubber_state== Rubber_COMPLETE)
-	{Rubber_state= Rubber_STEP1;flag_stop=0;}
-		flag_completely=1;
-		b22=servo_yellow_max;shot_complete=3;}
-				
-	if (shot_complete==3 && Rubber_state==Rubber_COMPLETE&& Reload_state ==RELOAD_COMPLETE) {if (flag_shoot==servo_min) flag_shoot=servo_max;else flag_shoot=servo_min;shot_complete=0;}
-				
-		
-		if (tim14.ClockTime%30==0)
-		servo_move(0xFE,100,b22);
-	//Usart1DmaPrintf("%d,%d,%d\r\n",motor6020.motor[0].Data.RawEcd,motor6020.motor[0].Data.LastEcd,motor6020.motor[0].Data.RoundCnt);
-		float Yaw_l;
-		Yaw_l=(209-(fabs(motor2006.motor[1].Data.TotalAngle-a22)/533234*164));
-		
-	if (Yaw_l<88) Yaw=-atan((88-Yaw_l)/663.1467)*57.3;
-		else Yaw=atan((Yaw_l-88)/663.1467)*57.3;
-	//	Yaw=atan((12.2-(motor2006.motor[1].Data.TotalAngle-a22)/360/89.085366)/56.7)*57.29578;
-		float Pitch_l;
-		Pitch_l=(593.5-(motor2006.motor[2].Data.TotalAngle-a23)/413228 *128.53);
-		
-		Pitch=acos((Pitch_l*Pitch_l+543.13405*543.13405-280.71*280.71)/(2*Pitch_l*543.13405))*57.29578;
-		
-//		{kll=InversePitchCalculation(infor[].Pitch_offset)+a23;
-//			Target_Angle_2006_pitch=kll;
-//		}
-	MotorCanOutput(can2, 0x200);
-		if (Last_dart_launch_opening_status==1&&referee2022.dart_client_cmd.dart_launch_opening_status==2&&referee2022.game_status.stage_remain_time<=400&&referee2022.game_status.game_progress==4)
-		{
-			
-					mode++;
-	
-//		if (mode==1)	{Target_Angle_2006=Rubber_Reset_Angel-100*(121);;if (Rubber_state== Rubber_IDLE) {Rubber_state= Rubber_STEP1;flag_stop=0;}}
-		if (mode==1)	{Target_Angle_2006_pitch=InversePitchCalculation(infor[0].Pitch_offset)+a23;if (Rubber_state== Rubber_IDLE) {Rubber_state= Rubber_STEP1;flag_stop=0;}}
-		//		if (mode==1)	{if (Rubber_state== Rubber_IDLE) {Rubber_state= Rubber_STEP1;flag_stop=0;}}
-		else if (mode==2) 	
-		{		
-	if (Rubber_state== Rubber_IDLE ||Rubber_state== Rubber_COMPLETE)
-	{Rubber_state= Rubber_STEP1;flag_stop=0;}
-		flag_completely=1;
-		b22=servo_yellow_max;
+	// Ê∂àÂ†µËΩ¨
+	if (rc_Ctrl_et.rc.s2 == 1 && rc_Ctrl_et.rc.s2_last == 3 && flag_stop == 1 && referee2022.game_status.game_progress != 4)
+		flag_stop = 0;
 
-	}
-			
-			
-		}
-		
-		if (Last_dart_launch_opening_status==2&&referee2022.dart_client_cmd.dart_launch_opening_status==0&&referee2022.game_status.stage_remain_time<=400&&referee2022.game_status.game_progress==4)
-		{
-			flag_wait=1;
-			
-		}
-			if (flag_wait==1&&Rubber_state==Rubber_COMPLETE)
-	{
-								if (mode==1 ) {if (flag_shoot==servo_min) flag_shoot=servo_max;else flag_shoot=servo_min;shot_complete=1;}
-		if (mode==2 ) {if (flag_shoot==servo_min) flag_shoot=servo_max;else flag_shoot=servo_min;shot_complete=1;}
-		flag_wait=0;
-		
-	}
-		Last_dart_launch_opening_status=referee2022.dart_client_cmd.dart_launch_opening_status;
-
-}
-
-/**
-  * @brief  CAN1Ω” ’÷–∂œªÿµ˜
-  */
-uint8_t CAN1_rxCallBack(CAN_RxBuffer* rxBuffer)
-{
-	MotorRxCallback(can1, (*rxBuffer)); 
-	return 0;
-}
-
-/**
-  * @brief  CAN2Ω” ’÷–∂œªÿµ˜
-  */
-uint8_t CAN2_rxCallBack(CAN_RxBuffer* rxBuffer)
-{
-	MotorRxCallback(can2, (*rxBuffer)); 	
-	return 0;
-}
-
-uint8_t  servo_check_number(uint8_t buf[])//–£—ÈŒª
-{   uint8_t i;
-    uint16_t temp=0;
-    for(i=2;i<buf[3]+2;i++)
-    {
-      temp+=buf[i];
-    }
-      temp=~temp;
-      i=(uint8_t)temp;
-    return i;
-}
-uint8_t buf[10];
-void servo_move(uint16_t id,uint16_t time,int16_t angle)//Œª÷√øÿ÷∆ƒ£ Ω
-{   
-    buf[0]=buf[1]=0x55;
-    buf[2]=id;
-    buf[3]=7;
-    buf[4]=1;
-    buf[5]=((uint8_t )(angle));
-    buf[6]=((uint8_t )((angle)>>8));
-    buf[7]=((uint8_t )(time));
-    buf[8]=((uint8_t )(time>>8));
-    buf[9]=servo_check_number(buf);
-    HAL_UART_Transmit_DMA(&huart5,(unsigned char*)buf,10);
-}
-void TIM13_Task(void)//æ´◊ºøÿ÷∆∂Êª˙Ω«∂»¡Ìø™µƒ∂® ±∆˜
-{
-			Timer++;
-		if  (Timer<=flag_shoot) HAL_GPIO_WritePin(GPIOC,GPIO_PIN_9, GPIO_PIN_SET);else HAL_GPIO_WritePin(GPIOC,GPIO_PIN_9, GPIO_PIN_RESET);
-    if  (Timer==200) Timer=0;
-	
-}
-
-uint8_t LCD_callback(uint8_t * recBuffer, uint16_t len) //≤‚ ‘”√LCD ∫¨∂‡÷÷π¶ƒ‹
-{
-	if (recBuffer[0]==0x55&&recBuffer[1]==0x01 &&recBuffer[2]==0x00 &&recBuffer[3]==0x01) //ªªµØ
-	{
-		Reload_mode++;
-		if (Reload_state ==RELOAD_COMPLETE) 
-				Reload_state = RELOAD_IDLE;
-	}
-	else if (recBuffer[0]==0x55&&recBuffer[1]==0x01 &&recBuffer[2]==0x00 &&recBuffer[3]==0x00) //–Óƒ‹
-	{
-		
-	if (Rubber_state== Rubber_IDLE ||Rubber_state== Rubber_COMPLETE)
-	{Rubber_state= Rubber_STEP1;flag_stop=0;}
-		
-	}
-	else if (recBuffer[0]==0x55&&recBuffer[1]==0x01 &&recBuffer[2]==0x00 &&recBuffer[3]==0x02) //“ª¥Œ»´¡˜≥Ã
-	{
-		if (Rubber_state== Rubber_IDLE ||Rubber_state== Rubber_COMPLETE)
-	{Rubber_state= Rubber_STEP1;flag_stop=0;}
-		flag_completely=1;
-		b22=servo_yellow_max;
-		
-	}
-	else if (recBuffer[0]==0x55&&recBuffer[1]==0x01 &&recBuffer[2]==0x00 &&recBuffer[3]==0x03) //ªªµØ∏¥Œª
-	{
-		Rubber_Reset_Angel=motor2006.motor[0].Data.TotalAngle;
-	}	
-	else if (recBuffer[0]==0x55&&recBuffer[1]==0x01 &&recBuffer[2]==0x00 &&recBuffer[3]==0x04) //Yaw Pitch ∏¥Œª
-	{
-		flag_reset=1;
-	}
-	
-	else if (recBuffer[0]==0x55&&recBuffer[1]==0x01 &&recBuffer[2]==0x01 &&recBuffer[3]==0x00) //’¢√≈’˝‘⁄ø™∆Ù
+	if (rc_Ctrl_et.rc.s2 == 1 && rc_Ctrl_et.rc.s2_last == 3 && referee2022.game_status.game_progress == 4)
 	{
 		mode++;
-		flag_none=1;
-		if (mode==1)	{Target_Angle_2006_pitch=InversePitchCalculation(infor[0].Pitch_offset)+a23;if (Rubber_state== Rubber_IDLE) {Rubber_state= Rubber_STEP1;flag_stop=0;}}
-		else if (mode==2) 	
-		{		
-	if (Rubber_state== Rubber_IDLE ||Rubber_state== Rubber_COMPLETE)
-	{Rubber_state= Rubber_STEP1;flag_stop=0;}
-		flag_completely=1;
-		b22=servo_yellow_max;
+		if (mode == 1)
+		{
+			Target_Angle_2006_pitch = InversePitchCalculation(infor[0].Pitch_offset) + a23;
+			if (Rubber_state == Rubber_IDLE)
+			{
+				Rubber_state = Rubber_STEP1;
+				flag_stop = 0;
+			}
+		}
+		else if (mode == 2)
+		{
+			if (Rubber_state == Rubber_IDLE || Rubber_state == Rubber_COMPLETE)
+			{
+				Rubber_state = Rubber_STEP1;
+				flag_stop = 0;
+			}
+			flag_completely = 1;
+			servo_yellow = servo_yellow_max;
+		}
+	}
 
-	}
-		
-		
-	}
-		else if (recBuffer[0]==0x55&&recBuffer[1]==0x01 &&recBuffer[2]==0x01 &&recBuffer[3]==0x01) //’¢√≈ø™∆Ù
+	if (rc_Ctrl_et.rc.s2 == 2 && rc_Ctrl_et.rc.s2_last == 3 && referee2022.game_status.game_progress == 4)
 	{
-		if (mode==1 &&Rubber_state==Rubber_COMPLETE) {if (flag_shoot==servo_min) flag_shoot=servo_max;else flag_shoot=servo_min;shot_complete=1;}
-		if (mode==2 &&Rubber_state==Rubber_COMPLETE) {if (flag_shoot==servo_min) flag_shoot=servo_max;else flag_shoot=servo_min;shot_complete=1;}
-		
-		
+		flag_wait = 1;
 	}
-			else if (recBuffer[0]==0x55&&recBuffer[1]==0x01 &&recBuffer[2]==0x02 &&recBuffer[3]==0x00) // ”æı±Í∂®
-	{
-		if (flag_Camera)flag_Camera=0;
-		else flag_Camera=1;
-				if (Yaw_add!=0)
-		{	if (Yaw_add>(5+mll))    Target_Angle_2006_yaw+=2000;
-else if (Yaw_add<(-5+mll)) Target_Angle_2006_yaw-=2000;
-else if 	(Yaw_add>(-5+mll)&&Yaw_add<(-2+mll)) Target_Angle_2006_yaw-=500;			
-else if (Yaw_add<(5+mll)&&Yaw_add>(2+mll)) Target_Angle_2006_yaw+=500;		
-		
-			}	
-	}
-				else if (recBuffer[0]==0x55&&recBuffer[1]==0x01 &&recBuffer[2]==0x02 &&recBuffer[3]==0x01) // ”æı∆´“∆++
-	{
-		
-mll+=2;
-	}
-				else if (recBuffer[0]==0x55&&recBuffer[1]==0x01 &&recBuffer[2]==0x02 &&recBuffer[3]==0x02) // ”æı∆´“∆--
-	{
-		
 
-		mll-=2;
-				
-	}
-					else if (recBuffer[0]==0x55&&recBuffer[1]==0x01 &&recBuffer[2]==0x03 &&recBuffer[3]==0x01) //Pitch++
-	{
-		
-infor[change_mode-1].Pitch_offset+=0.05;
-	
-				
-	}
-					else if (recBuffer[0]==0x55&&recBuffer[1]==0x01 &&recBuffer[2]==0x03 &&recBuffer[3]==0x02) //Pitch--
-	{
-		
+	rc_Ctrl_et.rc.s2_last = rc_Ctrl_et.rc.s2;
+	rc_Ctrl_et.rc.s1_last = rc_Ctrl_et.rc.s1;
 
-	infor[change_mode-1].Pitch_offset-=0.05;
-				
-	}
-					else if (recBuffer[0]==0x55&&recBuffer[1]==0x01 &&recBuffer[2]==0x03 &&recBuffer[3]==0x03) //—°‘Ò–ﬁ∏ƒÔ⁄∫≈
-	{
-		change_mode++;
-		if (change_mode==5) change_mode=1;
+	Change_YawPitch_use_remotecontrol();
 
-				
+	// ÂºÄÂÖ≥ËàµÊú∫
+	servo_control();
+
+	down_stop();
+
+	Yaw_Pitch_Reset();
+
+	Reload_change();
+
+	Rubber_change();
+
+	if (flag_stop == 0)
+		motor3508.motor[0].Data.Target = Speed_3508;
+	else
+		motor3508.motor[0].Data.Target = 0;
+
+	if (flag_stop == 1) // Â†µËΩ¨ÂêéÂè™Áî®‰ΩçÁΩÆÁéØÊéßÂà∂
+		motor3508.motor[0].Data.Output =
+			BasePID_PitchSpeedControl((BasePID_Object *)(&Motors3508_SpeedPID),
+									  BasePID_PitchAngleControl((BasePID_Object *)(&Motors3508_AngelPID), Target_Angle_3508, motor3508.motor[0].Data.TotalAngle), motor3508.motor[0].Data.SpeedRPM);
+	else
+		motor3508.motor[0].Data.Output = BasePID_SpeedControl(&run_pid, motor3508.motor[0].Data.Target, motor3508.motor[0].Data.SpeedRPM);
+
+	motor2006.motor[3].Data.Output =
+		BasePID_PitchSpeedControl((BasePID_Object *)(&Motors2006_load_SpeedPID),
+								  BasePID_YawAngleControl((BasePID_Object *)(&Motors2006_load_AngelPID), Target_Angle_2006_load, motor2006.motor[3].Data.TotalAngle), motor2006.motor[3].Data.SpeedRPM);
+
+	motor6020.motor[0].Data.Output =
+		BasePID_PitchSpeedControl((BasePID_Object *)(&Motors6020_pitch_SpeedPID),
+								  BasePID_YawAngleControl((BasePID_Object *)(&Motors6020_pitch_AngelPID), Target_6020, motor6020.motor[0].Data.TotalAngle), motor6020.motor[0].Data.SpeedRPM);
+
+	motor2006.motor[0].Data.Output =
+		BasePID_YawSpeedControl((BasePID_Object *)(&Motors2006_SpeedPID),
+								BasePID_YawAngleControl((BasePID_Object *)(&Motors2006_AngelPID), Target_Angle_2006, motor2006.motor[0].Data.TotalAngle), motor2006.motor[0].Data.SpeedRPM);
+
+	Send_toled();
+
+	if (rc_Ctrl_et.rc.s2 == 2) // Â§ç‰ΩçÊ†áÂøó‰Ωç ÈÅ•ÊéßÂô®‰∫ßÁîü
+		cnt_reset++;
+	else
+		cnt_reset = 0;
+	if (cnt_reset > 1000)
+	{
+		cnt_reset = 0;
+		flag_reset = 1;
 	}
+
+	if (rc_Ctrl_et.isOnline != 1)
+	{
+		ET08Init(&rc_Ctrl_et);
+		flag_stop = 0;
+	}
+
+	if (Yaw_add != 0 && flag_Camera == 0)
+	{
+		if (Yaw_add > (5 + Yaw_offset) && tim14.ClockTime % 100 == 0 && flag_reset == 1 && flag_yaw_stop == 1 && rc_Ctrl_et.rc.s2 == 1)
+			Target_Angle_2006_yaw += 2000;
+		else if (Yaw_add < (-5 + Yaw_offset) && tim14.ClockTime % 100 == 0 && flag_reset == 1 && flag_yaw_stop == 1 && rc_Ctrl_et.rc.s2 == 1)
+			Target_Angle_2006_yaw -= 2000;
+		else if (Yaw_add > (-5 + Yaw_offset) && Yaw_add < (-2 + Yaw_offset) && tim14.ClockTime % 100 == 0 && flag_reset == 1 && flag_yaw_stop == 1 && rc_Ctrl_et.rc.s2 == 1)
+			Target_Angle_2006_yaw -= 500;
+		else if (Yaw_add < (5 + Yaw_offset) && Yaw_add > (2 + Yaw_offset) && tim14.ClockTime % 100 == 0 && flag_reset == 1 && flag_yaw_stop == 1 && rc_Ctrl_et.rc.s2 == 1)
+			Target_Angle_2006_yaw += 500;
+	}
+	else if (Yaw_add != 0 && flag_Camera == 1)
+	{
+		if (tim14.ClockTime % 100 == 0)
+		{
+			if (Yaw_add > (5 + Yaw_offset))
+				Target_Angle_2006_yaw += 2000;
+			else if (Yaw_add < (-5 + Yaw_offset))
+				Target_Angle_2006_yaw -= 2000;
+			else if (Yaw_add > (-5 + Yaw_offset) && Yaw_add < (-2 + Yaw_offset))
+				Target_Angle_2006_yaw -= 500;
+			else if (Yaw_add < (5 + Yaw_offset) && Yaw_add > (2 + Yaw_offset))
+				Target_Angle_2006_yaw += 500;
+		}
+	}
+	Lcd_control();
+
+	if (tim14.ClockTime % 30 == 0)
+		servo_move(0xFE, 100, servo_yellow);
+
+	float Yaw_l = (209 - (fabs(motor2006.motor[1].Data.TotalAngle - a22) / 533234 * 164));
+
+	if (Yaw_l < 88)
+		Yaw = -atan((88 - Yaw_l) / 663.1467) * 57.3;
+	else
+		Yaw = atan((Yaw_l - 88) / 663.1467) * 57.3; // ‰∏âËßíÂáΩÊï∞ËÆ°ÁÆóYawÂÄº
+
+	float temp = (593.5 - (motor2006.motor[2].Data.TotalAngle - a23) / 413228 * 128.53);
+	Pitch = acos((temp * temp + 543.13405 * 543.13405 - 280.71 * 280.71) / (2 * temp * 543.13405)) * 57.29578;
+
+	if (rc_Ctrl_et.isOnline == 0)
+	{
+		motor3508.motor[0].Data.Output = 0;
+		motor2006.motor[0].Data.Output = 0;
+		motor2006.motor[1].Data.Output = 0;
+		motor2006.motor[2].Data.Output = 0;
+	}
+	if (Reload_state != RELOAD_ERROR)
+	{
+		MotorFillData(&motor3508.motor[0], motor3508.motor[0].Data.Output);
+		MotorFillData(&motor2006.motor[0], motor2006.motor[0].Data.Output);
+		MotorFillData(&motor2006.motor[1], motor2006.motor[1].Data.Output);
+		MotorFillData(&motor2006.motor[2], motor2006.motor[2].Data.Output);
+		MotorFillData(&motor6020.motor[0], motor6020.motor[0].Data.Output);
+		MotorFillData(&motor2006.motor[3], motor2006.motor[3].Data.Output);
+	}
+	else
+	{
+		MotorFillData(&motor3508.motor[0], 0);
+		MotorFillData(&motor2006.motor[0], 0);
+		MotorFillData(&motor2006.motor[1], 0);
+		MotorFillData(&motor2006.motor[2], 0);
+		MotorFillData(&motor6020.motor[0], 0);
+		MotorFillData(&motor2006.motor[3], 0);
+	}
+
+	MotorCanOutput(can2, 0x1FF);
+	MotorCanOutput(can1, 0x1FF);
+	MotorCanOutput(can2, 0x200);
+	Referee_Judge();
+}
+
+/**
+ * @brief  CAN1Êé•Êî∂‰∏≠Êñ≠ÂõûË∞É
+ */
+uint8_t CAN1_rxCallBack(CAN_RxBuffer *rxBuffer)
+{
+	MotorRxCallback(can1, (*rxBuffer));
 	return 0;
 }
 
-uint8_t Carema_callback(uint8_t * recBuffer, uint16_t len)
+/**
+ * @brief  CAN2Êé•Êî∂‰∏≠Êñ≠ÂõûË∞É
+ */
+uint8_t CAN2_rxCallBack(CAN_RxBuffer *rxBuffer)
 {
-	if (len==6)
-	{if (recBuffer[0]==0xAA&&recBuffer[5]==0xDD)
-	{
-		Camera_cnt++;
+	MotorRxCallback(can2, (*rxBuffer));
+	return 0;
+}
 
-		memcpy(&Yaw_add,&recBuffer[1],4);
-		
+uint8_t servo_check_number(uint8_t buf[]) // Ê†°È™å‰Ωç
+{
+	uint8_t i;
+	uint16_t temp = 0;
+	for (i = 2; i < buf[3] + 2; i++)
+	{
+		temp += buf[i];
 	}
+	temp = ~temp;
+	i = (uint8_t)temp;
+	return i;
+}
+
+void servo_move(uint16_t id, uint16_t time, int16_t angle) // ÂπªÂ∞îËàµÊú∫ ‰ΩçÁΩÆÊéßÂà∂Ê®°Âºè
+{
+	static uint8_t buf[10];
+	buf[0] = buf[1] = 0x55;
+	buf[2] = id;
+	buf[3] = 7;
+	buf[4] = 1;
+	buf[5] = ((uint8_t)(angle));
+	buf[6] = ((uint8_t)((angle) >> 8));
+	buf[7] = ((uint8_t)(time));
+	buf[8] = ((uint8_t)(time >> 8));
+	buf[9] = servo_check_number(buf);
+	HAL_UART_Transmit_DMA(&huart5, (unsigned char *)buf, 10);
+}
+
+void TIM13_Task(void) // Á≤æÂáÜÊéßÂà∂ËàµÊú∫ËßíÂ∫¶Âè¶ÂºÄÁöÑÂÆöÊó∂Âô®
+{
+	Timer++;
+	if (Timer <= flag_shoot)
+		HAL_GPIO_WritePin(GPIOC, GPIO_PIN_9, GPIO_PIN_SET);
+	else
+		HAL_GPIO_WritePin(GPIOC, GPIO_PIN_9, GPIO_PIN_RESET);
+	if (Timer == 200)
+		Timer = 0;
+}
+
+uint8_t Carema_callback(uint8_t *recBuffer, uint16_t len) // ‰∏ä‰ΩçÊú∫ËæìÂá∫ÊëÑÂÉèÂ§¥Êï∞ÊçÆÔºåÂåÖÂê´ËßÜËßâÂÅèÁßªÂíåÁõÆÊ†áËßíÂ∫¶ÔºåÂâçËÄÖÁî®‰∫é‰øÆÊ≠£YawËΩ¥ËØØÂ∑Æ
+{
+	if (len == 6)
+	{
+		if (recBuffer[0] == 0xAA && recBuffer[5] == 0xDD)
+		{
+			Camera_cnt++;
+			memcpy(&Yaw_add, &recBuffer[1], 4);
+		}
 	}
 }
-float InversePitchCalculation(float Pitch) {
-    const float A = 543.13405f;
-    const float B = 280.71f;
-    
-    // 1. Ω«∂»◊™ª°∂»
-    float Pitch_rad = Pitch / 57.29578f;
-    
-    // 2. Ω‚∂˛¥Œ∑Ω≥Ã«ÛPitch_l
-    float cos_val = cosf(Pitch_rad);
-    float discriminant = A*A*cos_val*cos_val - (A*A - B*B);
-    float Pitch_l = A*cos_val + sqrtf(discriminant); // »°’˝∏˘
-    
-    // 3. ∑¥Ω‚µÁª˙Ω«∂»
-    float motor_angle = (593.5f - Pitch_l) * 413228.0f / 128.53f;
-    
-    return motor_angle;
+
+float InversePitchCalculation(float Pitch) // Ê†πÊçÆÁõÆÊ†áPitchËßíÂ∫¶ÂèçËß£2006ÁîµÊú∫ÁöÑÁõÆÊ†áËßíÂ∫¶
+{
+	const float A = 543.13405f;
+	const float B = 280.71f;
+
+	// 1. ËßíÂ∫¶ËΩ¨ÂºßÂ∫¶
+	float Pitch_rad = Pitch / 57.29578f;
+
+	// 2. Ëß£‰∫åÊ¨°ÊñπÁ®ãÊ±ÇPitch_l
+	float cos_val = cosf(Pitch_rad);
+	float discriminant = A * A * cos_val * cos_val - (A * A - B * B);
+	float Pitch_l = A * cos_val + sqrtf(discriminant); // ÂèñÊ≠£Ê†π
+
+	// 3. ÂèçËß£ÁîµÊú∫ËßíÂ∫¶
+	float motor_angle = (593.5f - Pitch_l) * 413228.0f / 128.53f;
+
+	return motor_angle;
+}
+
+void up_stop(void) // ‰∏äÂ†µËΩ¨Ê£ÄÊµãÔºåÈÄöËøáÊàñGPIOE4ËøûÊé•ÂæÆÂä®ÂºÄÂÖ≥ÂÆûÁé∞ÔºåÂæÆÂä®ÂºÄÂÖ≥Â∏∏Èó≠ÔºåÂ†µËΩ¨Êó∂Ë¢´Âéã‰∏ãÊñ≠ÂºÄÔºåÊåÅÁª≠‰∏ÄÂÆöÊó∂Èó¥ÂàôËÆ§‰∏∫‰∏äÂ†µËΩ¨Ôºå3508ÁîµÊú∫ÁõÆÊ†áËßíÂ∫¶ËÆæÂÆö‰∏∫ÂΩìÂâçËßíÂ∫¶-200
+{
+	if (HAL_GPIO_ReadPin(GPIOE, GPIO_PIN_4) == 0)
+		cnt_up_stop++;
+	else
+		cnt_up_stop = 0;
+	if (cnt_up_stop > 5)
+	{
+		cnt_up_stop = 0;
+		flag_stop = 1;
+		Target_Angle_3508 = motor3508.motor[0].Data.TotalAngle - 200;
+		motor3508.motor[0].Data.Target = 0;
+	}
+}
+
+void down_stop(void) // ‰∏ãÂ†µËΩ¨Ê£ÄÊµã
+{
+	static int cnt_down_stop = 0;
+	if (abs(motor3508.motor[0].Data.Target - motor3508.motor[0].Data.SpeedRPM) > 350 && flag_stop == 0) // Â†µËΩ¨Âà§Êñ≠
+		cnt_down_stop++;
+	else
+		cnt_down_stop = 0;
+	if (cnt_down_stop >= 200)
+	{
+		cnt_down_stop = 0;
+		Target_Angle_3508 = motor3508.motor[0].Data.TotalAngle + 100;
+		flag_stop = 1;
+		motor3508.motor[0].Data.Target = 0;
+	}
+}
+
+void servo_control(void) // ËàµÊú∫ÊéßÂà∂ÔºåÊç¢ÂºπÊó∂ÈªÑËâ≤ËàµÊú∫ÁΩÆ‰ΩçÔºåÂèëÂ∞ÑÊó∂Á∫¢Ëâ≤ËàµÊú∫ÂàáÊç¢Áä∂ÊÄÅ
+{
+	static int cnt_shoot = 0;
+	if (abs(rc_Ctrl_et.rc.ch0 - 1024) > 500 && rc_Ctrl_et.rc.s2 != 2 && referee2022.game_status.game_progress != 4)
+		cnt_shoot++;
+	else
+		cnt_shoot = 0;
+
+	if (cnt_shoot >= 1000)
+	{
+		if (flag_shoot == servo_red_min)
+			flag_shoot = servo_red_max;
+		else
+			flag_shoot = servo_red_min;
+		cnt_shoot = 0;
+	}
 }

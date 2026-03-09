@@ -134,4 +134,5 @@ extern UART_RxBuffer uart8_buffer;
 
 extern float roll_target_speed;	
 extern float pitchangel;
+
 #endif
