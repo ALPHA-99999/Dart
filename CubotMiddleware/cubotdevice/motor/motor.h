@@ -4,114 +4,102 @@
 #include <stm32h7xx_hal.h>
 #include <driver_can.h>
 
-#include "linux_list.h" 
+#include "linux_list.h"
 
+#define K_ECD_TO_ANGLE 0.043945f	 //< ï¿½Ç¶ï¿½×ªï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ì¶Èµï¿½Ïµï¿½ï¿½ï¿½ï¿½360/8192
+#define ECD_RANGE_FOR_3508 8191		 //< ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ì¶ï¿½ÖµÎª0-8191
+#define CURRENT_LIMIT_FOR_3508 16000 //< ï¿½ï¿½ï¿½Æµï¿½ï¿½ï¿½ï¿½ï¿½Î§Îªï¿½ï¿½ï¿½ï¿½16384
+#define ECD_RANGE_FOR_6020 8191		 //< ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ì¶ï¿½ÖµÎª0-8191
+#define CURRENT_LIMIT_FOR_6020 29000 //< ï¿½ï¿½ï¿½Æµï¿½ï¿½ï¿½ï¿½ï¿½Î§Îªï¿½ï¿½ï¿½ï¿½30000
+#define ECD_RANGE_FOR_2006 8191		 //< ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ì¶ï¿½ÖµÎª0-8191
+#define CURRENT_LIMIT_FOR_2006 10000 //< ï¿½ï¿½ï¿½Æµï¿½ï¿½ï¿½ï¿½ï¿½Î§Îªï¿½ï¿½ï¿½ï¿½16384
 
-#define K_ECD_TO_ANGLE 0.043945f  		//< ½Ç¶È×ª»»±àÂëÆ÷¿Ì¶ÈµÄÏµÊý£º360/8192
-#define ECD_RANGE_FOR_3508 8191				//< ±àÂëÆ÷¿Ì¶ÈÖµÎª0-8191
-#define CURRENT_LIMIT_FOR_3508 16000   //< ¿ØÖÆµçÁ÷·¶Î§ÎªÕý¸º16384
-#define ECD_RANGE_FOR_6020 8191				//< ±àÂëÆ÷¿Ì¶ÈÖµÎª0-8191
-#define CURRENT_LIMIT_FOR_6020 29000   //< ¿ØÖÆµçÁ÷·¶Î§ÎªÕý¸º30000
-#define ECD_RANGE_FOR_2006 8191				//< ±àÂëÆ÷¿Ì¶ÈÖµÎª0-8191
-#define CURRENT_LIMIT_FOR_2006 10000   //< ¿ØÖÆµçÁ÷·¶Î§ÎªÕý¸º16384
-
-typedef enum{
-  Motor3508 = 0x00U,             //wu fu hao
+typedef enum
+{
+	Motor3508 = 0x00U, // wu fu hao
 	Motor6020 = 0x01U,
 	Motor2006 = 0x02U,
-  MIT       = 0x03U
-}MotorType;
+	MIT = 0x03U
+} MotorType;
 
-typedef struct{
-	
-  int16_t  Ecd;         	//< µ±Ç°±àÂëÆ÷·µ»ØÖµ
-	int16_t  SpeedRPM;			//< Ã¿·ÖÖÓËù×ªÈ¦Êý
-	int16_t  TorqueCurrent; //< ·´À¡Á¦¾Ø
-	uint8_t  Temperature;	  //< ÎÂ¶È
-	
-	float  RawEcd;				//< Ô­Ê¼±àÂëÆ÷Êý¾Ý
-	int16_t  LastEcd;			  //< ÉÏÒ»Ê±¿Ì±àÂëÆ÷·µ»ØÖµ			
-	float    Angle;					//< ½âËãºóµÄ±àÂëÆ÷½Ç¶È
-	int16_t  AngleSpeed;	  //< ½âËãºóµÄ±àÂëÆ÷½ÇËÙ¶È	
-	int32_t  RoundCnt;			//< ÀÛ¼Æ×ª¶¯È¦Êý
-	int32_t  TotalEcd;			//< ±àÂëÆ÷ÀÛ¼ÆÔöÁ¿Öµ
-	float  TotalAngle;		//< ÀÛ¼ÆÐý×ª½Ç¶È
+typedef struct
+{
 
-	float  Target;				//< µç»úµÄÆÚÍû²ÎÊý
-	int32_t  Output;  			//< µç»úÊä³öÖµ£¬Í¨³£ÎªµçÁ÷ºÍµçÑ¹	
-	float CanEcd[20] ;
-	float CanAngleSpeed[20] ;
+	int16_t Ecd;		   //< ï¿½ï¿½Ç°ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Öµ
+	int16_t SpeedRPM;	   //< Ã¿ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½×ªÈ¦ï¿½ï¿½
+	int16_t TorqueCurrent; //< ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+	uint8_t Temperature;   //< ï¿½Â¶ï¿½
+
+	float RawEcd;		//< Ô­Ê¼ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+	int16_t LastEcd;	//< ï¿½ï¿½Ò»Ê±ï¿½Ì±ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Öµ
+	float Angle;		//< ï¿½ï¿½ï¿½ï¿½ï¿½Ä±ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ç¶ï¿½
+	int16_t AngleSpeed; //< ï¿½ï¿½ï¿½ï¿½ï¿½Ä±ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ù¶ï¿½
+	int32_t RoundCnt;	//< ï¿½Û¼ï¿½×ªï¿½ï¿½È¦ï¿½ï¿½
+	int32_t TotalEcd;	//< ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Û¼ï¿½ï¿½ï¿½ï¿½ï¿½Öµ
+	float TotalAngle;	//< ï¿½Û¼ï¿½ï¿½ï¿½×ªï¿½Ç¶ï¿½
+
+	float Target;	//< ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+	int32_t Output; //< ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Öµï¿½ï¿½Í¨ï¿½ï¿½Îªï¿½ï¿½ï¿½ï¿½ï¿½Íµï¿½Ñ¹
+	float CanEcd[20];
+	float CanAngleSpeed[20];
 	float LvboAngle;
-	int16_t  LvboEcd;
-	int16_t  LvboSpeedRPM;
-  int16_t  moter_id;
-	struct{
+	int16_t LvboEcd;
+	int16_t LvboSpeedRPM;
+	int16_t moter_id;
+	struct
+	{
 		uint16_t Cnt;
 		uint16_t FPS;
 		uint8_t Status;
 		uint8_t StatusCnt;
-	}Online_check;
-	//´ïÃîµç»úÏà¹ØÊý¾Ý
-	float    MITangle;
-	float    MITspeed;
-	float    MITtorque;
-}MotorData;
+	} Online_check;
+	// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+	float MITangle;
+	float MITspeed;
+	float MITtorque;
+} MotorData;
 
-
-typedef struct 														
+typedef struct
 {
-	uint8_t  CanNumber;			 										//< µç»úËùÊ¹ÓÃµÄCAN¶Ë¿ÚºÅ
-	uint16_t CanId;			 												//< µç»úID	
-	uint8_t  MotorType;			 										//< µç»úÀàÐÍ	
-	uint16_t EcdOffset;	 									  		//< µç»ú³õÊ¼Áãµã
-	uint16_t EcdFullRange;											//< ±àÂëÆ÷Á¿³Ì
-	int16_t  CurrentLimit;			 								//< µçµ÷ÄÜ³ÐÊÜµÄ×î´óµçÁ÷  
-}MotorParam;
+	uint8_t CanNumber;	   //< ï¿½ï¿½ï¿½ï¿½ï¿½Ê¹ï¿½Ãµï¿½CANï¿½Ë¿Úºï¿½
+	uint16_t CanId;		   //< ï¿½ï¿½ï¿½ID
+	uint8_t MotorType;	   //< ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+	uint16_t EcdOffset;	   //< ï¿½ï¿½ï¿½ï¿½ï¿½Ê¼ï¿½ï¿½ï¿½
+	uint16_t EcdFullRange; //< ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+	int16_t CurrentLimit;  //< ï¿½ï¿½ï¿½ï¿½Ü³ï¿½ï¿½Üµï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+} MotorParam;
 
-static  uint8_t CAN_update_data(MotorData* motor, CAN_RxBuffer rxBuffer);
-typedef uint8_t (*Motor_DataUpdate)(MotorData* motor_data, CAN_RxBuffer rxBuffer); 
+static uint8_t CAN_update_data(MotorData *motor, CAN_RxBuffer rxBuffer);
+typedef uint8_t (*Motor_DataUpdate)(MotorData *motor_data, CAN_RxBuffer rxBuffer);
 
-static  uint8_t CAN_fill_3508_2006_data(CAN_Object can, MotorData motor_data, uint16_t id);
+static uint8_t CAN_fill_3508_2006_data(CAN_Object can, MotorData motor_data, uint16_t id);
 typedef uint8_t (*CAN_FillMotorData)(CAN_Object can, MotorData motor_data, uint16_t id);
 
-typedef struct {
+typedef struct
+{
+	MotorData Data;
+	MotorParam Param;
+	list_t list;
+	Motor_DataUpdate MotorUpdate; //< ï¿½ï¿½ï¿½Âµï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ÝµÄºï¿½ï¿½ï¿½Ö¸ï¿½ï¿½
+	CAN_FillMotorData FillMotorData;
+} Motor;
 
-    MotorData    Data;
-	  MotorParam   Param;
-	
-	//list_t  
-    list_t             list;
-	  Motor_DataUpdate   MotorUpdate;											//< ¸üÐÂµç»úÔËÐÐÊý¾ÝµÄº¯ÊýÖ¸Õë
-	  CAN_FillMotorData  FillMotorData;	
-}Motor;
-
-
-
-static void MotorEcdtoAngle(Motor* motor);
-static void MotorLvboEcdtoAngle(Motor* motor);
-static void MotorOutputLimit(Motor* motor);
-static  uint8_t CAN_fill_3508_2006_data(CAN_Object can, MotorData motor_data, uint16_t id);
-static  uint8_t CAN_fill_6020_data( CAN_Object can, MotorData motor_data,uint16_t id);
-static  uint8_t CAN_update_data(MotorData* motor, CAN_RxBuffer rxBuffer);
-static void CAN_RegisteMotor(CAN_Object* canx, Motor* motor);
-static void CAN_DeleteMotor(Motor* motor);
+static void MotorEcdtoAngle(Motor *motor);
+static void MotorLvboEcdtoAngle(Motor *motor);
+static void MotorOutputLimit(Motor *motor);
+static uint8_t CAN_fill_3508_2006_data(CAN_Object can, MotorData motor_data, uint16_t id);
+static uint8_t CAN_fill_6020_data(CAN_Object can, MotorData motor_data, uint16_t id);
+static uint8_t CAN_update_data(MotorData *motor, CAN_RxBuffer rxBuffer);
+static void CAN_RegisteMotor(CAN_Object *canx, Motor *motor);
+static void CAN_DeleteMotor(Motor *motor);
 int float_to_uint(float x, float x_min, float x_max, int bits);
 float uint_to_float(int x_int, float x_min, float x_max, int bits);
-static  uint8_t CAN_MIT_update_data(MotorData* motor, CAN_RxBuffer rxBuffer);
-void MotorInit(Motor* motor, uint16_t ecd_Offset, MotorType type, CanNumber canx, uint16_t id);
- Motor* MotorFind(uint16_t canid, CAN_Object canx);
+static uint8_t CAN_MIT_update_data(MotorData *motor, CAN_RxBuffer rxBuffer);
+void MotorInit(Motor *motor, uint16_t ecd_Offset, MotorType type, CanNumber canx, uint16_t id);
+Motor *MotorFind(uint16_t canid, CAN_Object canx);
 void MotorRxCallback(CAN_Object canx, CAN_RxBuffer rxBuffer);
 uint16_t MotorReturnID(Motor motor);
-void MotorFillData(Motor* motor, int32_t output);
+void MotorFillData(Motor *motor, int32_t output);
 uint16_t MotorCanOutput(CAN_Object can, int16_t IDforTxBuffer);
 
-
 #endif
-
-
-
-
-
-
-
-
