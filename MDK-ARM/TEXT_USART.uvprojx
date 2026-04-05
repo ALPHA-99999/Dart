@@ -54,7 +54,7 @@
           <CreateLib>0</CreateLib>
           <CreateHexFile>1</CreateHexFile>
           <DebugInformation>1</DebugInformation>
-          <BrowseInformation>1</BrowseInformation>
+          <BrowseInformation>0</BrowseInformation>
           <ListingPath></ListingPath>
           <HexFormatSelection>1</HexFormatSelection>
           <Merge32K>0</Merge32K>
@@ -410,11 +410,6 @@
               <FilePath>..\CubotMiddleware\cubotdevice\check\check.c</FilePath>
             </File>
             <File>
-              <FileName>servo.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\CubotMiddleware\cubotdevice\servo.c</FilePath>
-            </File>
-            <File>
               <FileName>interaction.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\CubotMiddleware\interaction\interaction.c</FilePath>
@@ -423,16 +418,6 @@
               <FileName>referee.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\CubotMiddleware\referee\referee.c</FilePath>
-            </File>
-            <File>
-              <FileName>interaction_image.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\CubotMiddleware\interaction\interaction_image.c</FilePath>
-            </File>
-            <File>
-              <FileName>interaction_image.h</FileName>
-              <FileType>5</FileType>
-              <FilePath>..\CubotMiddleware\interaction\interaction_image.h</FilePath>
             </File>
             <File>
               <FileName>et08.c</FileName>

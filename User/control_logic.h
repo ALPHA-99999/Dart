@@ -24,6 +24,9 @@ typedef struct
 
 // 主任务函数
 void TIM14_Task(void);
+void MasterControl_Start(void);
+void MasterControl_Stop(void);
+void MasterControl_Task(void);
 
 // 短函数声明（20行以内）
 void TIM13_Task(void);
@@ -61,6 +64,7 @@ typedef enum {
 
 
 #endif /* CONTROLLOGIC_H_ */
+
 
 
 
